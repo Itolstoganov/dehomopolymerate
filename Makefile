@@ -4,7 +4,7 @@ PREFIX ?= /usr/local
 TESTDIR = test
 
 CC ?= gcc
-CFLAGS ?= -Wall -Wextra -Ofast -std=c99 
+CFLAGS ?= -Wall -Wextra -Ofast -std=c99
 LIBS = -lz -lm
 
 .PHONY: test clean 

@@ -32,10 +32,16 @@ void show_help(int retcode)
 }
 
 //------------------------------------------------------------------------
-int kseq_remove_homopolymers(kseq_t* r) {
+int kseq_remove_homopolymers_and_dimers(kseq_t* r) {
   int fq = r->qual.l; 
-  char s2[r->seq.l+1];
-  char q2[r->seq.l+1];
+  // char s2[r->seq.l+1];
+  // char q2[r->seq.l+1];
+  // fprintf(stderr, "%s\n", "allocating");
+
+  char* s2 = (char*)calloc(r->seq.l+1, sizeof(char));
+  char* q2 = (char*)calloc(r->seq.l+1, sizeof(char));
+  // fprintf(stderr, "%s\n", "allocated");
+
   char* s = r->seq.s;
   char* q = r->qual.s;
   size_t j=1, i=1;
@@ -50,11 +56,65 @@ int kseq_remove_homopolymers(kseq_t* r) {
   }
   s2[j] = '\0';
   if (fq) q2[j] = '\0';
-  //printf("i=%u j=%u s2=%s q2=%s\n", i, j, s2, q2);
-  strcpy(s, s2);
-  if (fq) strcpy(q, q2);
+  //// printf("i=%u j=%u s2=%s q2=%s\n", i, j, s2, q2);
+  // strcpy(s, s2);
+  // if (fq) strcpy(q, q2);
+  // r->seq.l = j;
+  // if (fq) r->qual.l = j;
+  // return j;
+
+  // fprintf(stderr, "%s\n", "dimers");
+
+  const size_t MAX_DIMER=16;
+  size_t nl = j;
+  // fprintf(stderr, "%s\n", "allocating");
+  char* s3 = (char*)calloc(nl + 1, sizeof(char));
+  char* q3 = (char*)calloc(nl + 1, sizeof(char));
+  // fprintf(stderr, "%s\n", "allocated");
+  j=2,i=2;
+  size_t cnt = 1;
+  s3[0] = s2[0];
+  s3[1] = s2[1];
+  if (fq) {
+    q3[0] = q2[0];
+    q3[1] = q2[1];
+  }
+  // fprintf(stderr, "%s\n", "processing string");
+  while (i < nl - 1) {
+    if (s2[i] == s3[j - 2] && s2[i + 1] == s3[j - 1]) {
+      ++cnt;
+      if (cnt < MAX_DIMER) {
+        s3[j] = s2[i];
+        s3[j + 1] = s2[i + 1];
+        if (fq) {
+          q3[j] = q2[i];
+          q3[j + 1] = q2[i + 1];
+        }
+        j += 2;
+      }
+      i += 2;
+    } else {
+      s3[j] = s2[i];
+      if (fq) {
+        q3[j] = q2[i];
+      }
+      ++i;
+      ++j;
+      cnt = 1;
+    }
+  }
+  s3[j] = '\0';
+  if (fq) q3[j] = '\0';
+  // fprintf(stderr, "%s\n", "copying sequence");
+  strcpy(s, s3);
+  // fprintf(stderr, "%s\n", "copying quality");
+  if (fq) strcpy(q, q3);
   r->seq.l = j;
-  if (fq) r->qual.l = j;
+  if (fq) r->qual.l =j;
+  free(s2);
+  free(q2);
+  free(s3);
+  free(q3);
   return j;
 }
  
@@ -77,8 +137,9 @@ int main(int argc, char *argv[])
 
   // say hello
   if (!quiet) {
-    //fprintf(stderr, "RUNNING: %s %s from %s\n", EXENAME, VERSION, GITHUB_URL);
-    //fprintf(stderr, "minlen=%d\n", minlen);
+    fprintf(stderr, "RUNNING: %s %s from %s\n", EXENAME, VERSION, GITHUB_URL);
+    fprintf(stderr, "minlen=%d\n", minlen);
+    fprintf(stderr, "yes\n");
   }
   // open stdin or the file on commandline
   FILE* input = NULL;
@@ -111,7 +172,7 @@ int main(int argc, char *argv[])
 
   // setup loop  
   long l, N=0, L=0, L2=0, N2=0;
-  kseq_t* kseq = kseq_init(fp);
+  kseq_t* kseq = kseq_init(fp); 
 
   // loop over sequences
   while ((l = kseq_read(kseq)) >= 0) {    
@@ -120,7 +181,9 @@ int main(int argc, char *argv[])
     L += l;
     
     // tranform in place - will be shorter so no alloc() needed
-    int len = kseq_remove_homopolymers(kseq);
+    // fprintf(stderr, "%s\t%s\n", "start compression", kseq->name.s);
+    int len = kseq_remove_homopolymers_and_dimers(kseq);
+    // fprintf(stderr, "%s", "end compression\n");
     // fprintf(stderr, "l=%ld l'=%d minlen=%d\n", l, len, minlen);
     
     // skip over short sequences as per -l parameter
@@ -135,7 +198,7 @@ int main(int argc, char *argv[])
     }
     else {
       // not printing comment here
-      printf("@%s\n%s\n+\n%s\n", kseq->name.s, kseq->seq.s, kseq->qual.s);
+      printf("@%s\t%s\n%s\n+\n%s\n", kseq->name.s, kseq->comment.s, kseq->seq.s, kseq->qual.s);
     }
     // keep output stats
     L2 += len;
